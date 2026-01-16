@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="zh-TW" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>英語記憶配對遊戲</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&amp;family=Poppins:wght@400;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+    body {
+      box-sizing: border-box;
+    }
+    
+    .card {
+      perspective: 1000px;
+      cursor: pointer;
+      transition: transform 0.2s ease;
+    }
+    
+    .card:hover:not(.matched):not(.flipped) {
+      transform: scale(1.05);
+    }
+    
+    .card-inner {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      transition: transform 0.5s ease;
+      transform-style: preserve-3d;
+    }
+    
+    .card.flipped .card-inner,
+    .card.matched .card-inner {
+      transform: rotateY(180deg);
+    }
+    
+    .card-front, .card-back {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      backface-visibility: hidden;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px;
+      text-align: center;
+    }
+    
+    .card-front {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    
+    .card-back {
+      transform: rotateY(180deg);
+    }
+    
+    .matched {
+      animation: matchPulse 0.5s ease;
+    }
+    
+    @keyframes matchPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+    
+    .score-animate {
+      animation: scoreUp 0.5s ease;
+    }
+    
+    @keyframes scoreUp {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.3); color: #10b981; }
+      100% { transform: scale(1); }
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .fade-in {
+      animation: fadeIn 0.6s ease forwards;
+    }
+    
+    @keyframes confetti {
+      0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+      100% { transform: translateY(100px) rotate(720deg); opacity: 0; }
+    }
+    
+    .confetti {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      animation: confetti 1s ease forwards;
+    }
+  </style>
+  <style>@view-transition { navigation: auto; }</style>
+  <script src="/_sdk/data_sdk.js" type="text/javascript"></script>
+ </head>
+ <body class="h-full bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-800 font-sans overflow-auto">
+  <div id="app-wrapper" class="w-full h-full flex flex-col items-center justify-center p-4 min-h-full"><!-- Header -->
+   <div class="text-center mb-6 fade-in">
+    <h1 id="game-title" class="text-3xl md:text-4xl font-bold text-white mb-2" style="font-family: 'Poppins', 'Noto Sans TC', sans-serif;">🎯 英語記憶配對遊戲</h1>
+    <p id="instruction-text" class="text-purple-200 text-sm md:text-base" style="font-family: 'Noto Sans TC', sans-serif;">找出中文與英文的配對組合！</p>
+   </div><!-- Score Display -->
+   <div class="bg-white/10 backdrop-blur-sm rounded-2xl px-6 py-3 mb-6 fade-in" style="animation-delay: 0.1s;">
+    <div class="flex items-center gap-6">
+     <div class="text-center">
+      <p class="text-purple-200 text-xs uppercase tracking-wide">分數</p>
+      <p id="score" class="text-3xl font-bold text-white" style="font-family: 'Poppins', sans-serif;">0</p>
+     </div>
+     <div class="w-px h-10 bg-white/20"></div>
+     <div class="text-center">
+      <p class="text-purple-200 text-xs uppercase tracking-wide">配對</p>
+      <p id="matches" class="text-3xl font-bold text-white" style="font-family: 'Poppins', sans-serif;">0/5</p>
+     </div>
+    </div>
+   </div><!-- Game Board -->
+   <div id="game-board" class="grid grid-cols-5 gap-3 md:gap-4 max-w-2xl w-full mb-6 fade-in" style="animation-delay: 0.2s;"><!-- Cards will be generated here -->
+   </div><!-- Result Modal -->
+   <div id="result-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div class="bg-gradient-to-br from-purple-600 to-pink-600 rounded-3xl p-8 text-center max-w-sm w-full shadow-2xl relative overflow-hidden">
+     <div id="confetti-container" class="absolute inset-0 pointer-events-none"></div>
+     <div class="text-6xl mb-4">
+      🎉
+     </div>
+     <h2 class="text-2xl font-bold text-white mb-2" style="font-family: 'Poppins', 'Noto Sans TC', sans-serif;">恭喜完成！</h2>
+     <p class="text-purple-100 mb-4">你已完成所有配對</p>
+     <div class="bg-white/20 rounded-xl py-4 px-6 mb-6">
+      <p class="text-purple-100 text-sm">最終分數</p>
+      <p id="final-score" class="text-5xl font-bold text-white" style="font-family: 'Poppins', sans-serif;">100</p>
+     </div><button id="restart-btn" class="w-full bg-white text-purple-600 font-bold py-3 px-6 rounded-xl hover:bg-purple-100 transition-all duration-300 transform hover:scale-105 active:scale-95" style="font-family: 'Noto Sans TC', sans-serif;"> 🔄 重新開始 </button>
+    </div>
+   </div><!-- Restart Button --> <button id="main-restart-btn" class="bg-white/10 hover:bg-white/20 text-white font-medium py-3 px-8 rounded-xl transition-all duration-300 backdrop-blur-sm border border-white/20 fade-in" style="animation-delay: 0.3s; font-family: 'Noto Sans TC', sans-serif;"> 🔄 重新開始 </button>
+  </div>
+  <script>
+    // 詞彙庫 - 適合國中程度的英語詞彙
+    const vocabularyPool = [
+      { chinese: "學生", english: "student" },
+      { chinese: "老師", english: "teacher" },
+      { chinese: "學校", english: "school" },
+      { chinese: "朋友", english: "friend" },
+      { chinese: "家庭", english: "family" },
+      { chinese: "音樂", english: "music" },
+      { chinese: "運動", english: "sport" },
+      { chinese: "電影", english: "movie" },
+      { chinese: "書本", english: "book" },
+      { chinese: "食物", english: "food" },
+      { chinese: "動物", english: "animal" },
+      { chinese: "顏色", english: "color" },
+      { chinese: "天氣", english: "weather" },
+      { chinese: "季節", english: "season" },
+      { chinese: "假期", english: "vacation" },
+      { chinese: "興趣", english: "hobby" },
+      { chinese: "健康", english: "health" },
+      { chinese: "快樂", english: "happy" },
+      { chinese: "美麗", english: "beautiful" },
+      { chinese: "重要", english: "important" },
+      { chinese: "困難", english: "difficult" },
+      { chinese: "容易", english: "easy" },
+      { chinese: "開始", english: "begin" },
+      { chinese: "結束", english: "finish" },
+      { chinese: "練習", english: "practice" }
+    ];
+
+    const defaultConfig = {
+      game_title: "🎯 英語記憶配對遊戲",
+      instruction_text: "找出中文與英文的配對組合！",
+      background_color: "#1e1b4b",
+      card_color: "#8b5cf6",
+      text_color: "#ffffff",
+      accent_color: "#ec4899",
+      surface_color: "#ffffff1a",
+      font_family: "Poppins"
+    };
+
+    let config = { ...defaultConfig };
+    let score = 0;
+    let matchedPairs = 0;
+    let selectedCards = [];
+    let currentVocabulary = [];
+    let canSelect = true;
+
+    // Shuffle array using Fisher-Yates algorithm
+    function shuffleArray(array) {
+      const newArray = [...array];
+      for (let i = newArray.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+      }
+      return newArray;
+    }
+
+    // Select 5 random vocabulary pairs
+    function selectRandomVocabulary() {
+      const shuffled = shuffleArray(vocabularyPool);
+      return shuffled.slice(0, 5);
+    }
+
+    // Create cards from vocabulary
+    function createCards() {
+      currentVocabulary = selectRandomVocabulary();
+      const cards = [];
+      
+      currentVocabulary.forEach((pair, index) => {
+        cards.push({
+          id: `ch-${index}`,
+          pairId: index,
+          text: pair.chinese,
+          type: 'chinese'
+        });
+        cards.push({
+          id: `en-${index}`,
+          pairId: index,
+          text: pair.english,
+          type: 'english'
+        });
+      });
+      
+      return shuffleArray(cards);
+    }
+
+    // Render game board
+    function renderBoard() {
+      const board = document.getElementById('game-board');
+      const cards = createCards();
+      
+      board.innerHTML = cards.map(card => `
+        <div class="card aspect-square" data-id="${card.id}" data-pair-id="${card.pairId}" data-type="${card.type}">
+          <div class="card-inner">
+            <div class="card-front flex items-center justify-center">
+              <span class="text-white text-2xl">❓</span>
+            </div>
+            <div class="card-back ${card.type === 'chinese' ? 'bg-gradient-to-br from-pink-500 to-rose-600' : 'bg-gradient-to-br from-cyan-500 to-blue-600'}">
+              <span class="text-white font-bold text-sm md:text-base" style="font-family: ${card.type === 'chinese' ? "'Noto Sans TC', sans-serif" : "'Poppins', sans-serif"};">
+                ${card.text}
+              </span>
+            </div>
+          </div>
+        </div>
+      `).join('');
+      
+      // Add click handlers
+      document.querySelectorAll('.card').forEach(card => {
+        card.addEventListener('click', handleCardClick);
+      });
+    }
+
+    // Handle card click
+    function handleCardClick(e) {
+      const card = e.currentTarget;
+      
+      if (!canSelect || card.classList.contains('flipped') || card.classList.contains('matched') || selectedCards.length >= 2) {
+        return;
+      }
+      
+      card.classList.add('flipped');
+      selectedCards.push(card);
+      
+      if (selectedCards.length === 2) {
+        checkMatch();
+      }
+    }
+
+    // Check if selected cards match
+    function checkMatch() {
+      canSelect = false;
+      const [card1, card2] = selectedCards;
+      const pairId1 = card1.dataset.pairId;
+      const pairId2 = card2.dataset.pairId;
+      const type1 = card1.dataset.type;
+      const type2 = card2.dataset.type;
+      
+      // Cards match if they have the same pairId but different types
+      if (pairId1 === pairId2 && type1 !== type2) {
+        // Match!
+        setTimeout(() => {
+          card1.classList.add('matched');
+          card2.classList.add('matched');
+          
+          score += 20;
+          matchedPairs++;
+          
+          updateScore();
+          
+          selectedCards = [];
+          canSelect = true;
+          
+          if (matchedPairs === 5) {
+            setTimeout(showResult, 500);
+          }
+        }, 500);
+      } else {
+        // No match
+        setTimeout(() => {
+          card1.classList.remove('flipped');
+          card2.classList.remove('flipped');
+          selectedCards = [];
+          canSelect = true;
+        }, 1000);
+      }
+    }
+
+    // Update score display
+    function updateScore() {
+      const scoreEl = document.getElementById('score');
+      const matchesEl = document.getElementById('matches');
+      
+      scoreEl.textContent = score;
+      scoreEl.classList.add('score-animate');
+      setTimeout(() => scoreEl.classList.remove('score-animate'), 500);
+      
+      matchesEl.textContent = `${matchedPairs}/5`;
+    }
+
+    // Show result modal
+    function showResult() {
+      const modal = document.getElementById('result-modal');
+      const finalScore = document.getElementById('final-score');
+      const confettiContainer = document.getElementById('confetti-container');
+      
+      finalScore.textContent = score;
+      modal.classList.remove('hidden');
+      
+      // Create confetti
+      const colors = ['#ec4899', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b'];
+      for (let i = 0; i < 30; i++) {
+        const confetti = document.createElement('div');
+        confetti.className = 'confetti';
+        confetti.style.left = `${Math.random() * 100}%`;
+        confetti.style.top = `${Math.random() * 50}%`;
+        confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+        confetti.style.animationDelay = `${Math.random() * 0.5}s`;
+        confetti.style.borderRadius = Math.random() > 0.5 ? '50%' : '0';
+        confettiContainer.appendChild(confetti);
+      }
+      
+      setTimeout(() => {
+        confettiContainer.innerHTML = '';
+      }, 1500);
+    }
+
+    // Reset game
+    function resetGame() {
+      score = 0;
+      matchedPairs = 0;
+      selectedCards = [];
+      canSelect = true;
+      
+      document.getElementById('score').textContent = '0';
+      document.getElementById('matches').textContent = '0/5';
+      document.getElementById('result-modal').classList.add('hidden');
+      
+      renderBoard();
+    }
+
+    // Apply config to UI
+    async function onConfigChange(cfg) {
+      const titleEl = document.getElementById('game-title');
+      const instructionEl = document.getElementById('instruction-text');
+      
+      if (titleEl) {
+        titleEl.textContent = cfg.game_title || defaultConfig.game_title;
+        titleEl.style.fontFamily = `${cfg.font_family || defaultConfig.font_family}, 'Noto Sans TC', sans-serif`;
+      }
+      
+      if (instructionEl) {
+        instructionEl.textContent = cfg.instruction_text || defaultConfig.instruction_text;
+      }
+    }
+
+    // Initialize SDK
+    if (window.elementSdk) {
+      window.elementSdk.init({
+        defaultConfig,
+        onConfigChange,
+        mapToCapabilities: (cfg) => ({
+          recolorables: [
+            {
+              get: () => cfg.background_color || defaultConfig.background_color,
+              set: (value) => {
+                cfg.background_color = value;
+                window.elementSdk.setConfig({ background_color: value });
+              }
+            },
+            {
+              get: () => cfg.card_color || defaultConfig.card_color,
+              set: (value) => {
+                cfg.card_color = value;
+                window.elementSdk.setConfig({ card_color: value });
+              }
+            },
+            {
+              get: () => cfg.text_color || defaultConfig.text_color,
+              set: (value) => {
+                cfg.text_color = value;
+                window.elementSdk.setConfig({ text_color: value });
+              }
+            },
+            {
+              get: () => cfg.accent_color || defaultConfig.accent_color,
+              set: (value) => {
+                cfg.accent_color = value;
+                window.elementSdk.setConfig({ accent_color: value });
+              }
+            },
+            {
+              get: () => cfg.surface_color || defaultConfig.surface_color,
+              set: (value) => {
+                cfg.surface_color = value;
+                window.elementSdk.setConfig({ surface_color: value });
+              }
+            }
+          ],
+          borderables: [],
+          fontEditable: {
+            get: () => cfg.font_family || defaultConfig.font_family,
+            set: (value) => {
+              cfg.font_family = value;
+              window.elementSdk.setConfig({ font_family: value });
+            }
+          },
+          fontSizeable: undefined
+        }),
+        mapToEditPanelValues: (cfg) => new Map([
+          ["game_title", cfg.game_title || defaultConfig.game_title],
+          ["instruction_text", cfg.instruction_text || defaultConfig.instruction_text]
+        ])
+      });
+      config = window.elementSdk.config;
+    }
+
+    // Initialize game
+    document.addEventListener('DOMContentLoaded', () => {
+      renderBoard();
+      
+      document.getElementById('restart-btn').addEventListener('click', resetGame);
+      document.getElementById('main-restart-btn').addEventListener('click', resetGame);
+    });
+  </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9be9d24f62614a88',t:'MTc2ODUyNjc1My4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
